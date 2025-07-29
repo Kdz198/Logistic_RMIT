@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FPT Warehouse</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #map { height: 600px; width: 100%; }
+    body { margin: 0; padding: 0; position: relative; }
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+      70% { box-shadow: 0 0 0 20px rgba(255, 0, 0, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+    }
+    .pulse-icon-xsec {
+      background-color: red;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      border: 2px solid white;
+    }
+    .pulse-icon-fpt {
+      background-color: yellow;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      border: 2px solid white;
+    }
+    .truck-icon {
+      animation: truckPulse 1.5s infinite;
+    }
+    @keyframes truckPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+    .dashed-line {
+      stroke-dasharray: 10, 10;
+      stroke-width: 4;
+      animation: dash 2s linear infinite;
+    }
+    @keyframes dash {
+      to { stroke-dashoffset: -20; }
+    }
+    .legend {
+      position: absolute;
+      bottom: 50px;
+      right: 10px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+      min-width: 200px;
+      backdrop-filter: blur(5px);
+    }
+    .legend h3 {
+      margin: 0 0 12px 0;
+      font-family: Arial, sans-serif;
+      font-size: 16px;
+      color: #333;
+      text-align: center;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      color: #555;
+    }
+    .legend-icon {
+      width: 32px;
+      height: 32px;
+      margin-right: 10px;
+      filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.1));
+    }
+    .legend-icon.factory {
+      animation: factoryFloat 3s ease-in-out infinite;
+    }
+    .legend-icon.warehouse {
+      animation: warehouseFloat 3s ease-in-out infinite 1s;
+    }
+    .legend-icon.shop {
+      animation: shopFloat 3s ease-in-out infinite 2s;
+    }
+    @keyframes factoryFloat {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-3px); }
+    }
+    @keyframes warehouseFloat {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-2px); }
+    }
+    @keyframes shopFloat {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-1px); }
+    }
+    .leaflet-popup-content {
+      font-size: 12px;
+      line-height: 1.4;
+      padding: 5px;
+      margin: 5px;
+      white-space: nowrap;
+    }
+    .leaflet-popup-content-wrapper {
+      min-width: 200px;
+      max-width: 300px;
+    }
+    .popup-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .delivery-button {
+      position: absolute;
+      bottom: 50px;
+      left: 10px;
+      background: #3498db;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      cursor: pointer;
+      z-index: 1000;
+      transition: background 0.3s;
+    }
+    .delivery-button:hover {
+      background: #2980b9;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-content {
+      background: rgba(255, 255, 255, 0.95);
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      max-width: 600px;
+      width: 90%;
+      font-family: Arial, sans-serif;
+      backdrop-filter: blur(5px);
+    }
+    .modal-content h2 {
+      margin: 0 0 20px;
+      font-size: 20px;
+      color: #333;
+      text-align: center;
+    }
+    .modal-content p {
+      font-size: 14px;
+      color: #555;
+      margin: 10px 0;
+    }
+    .modal-flow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 20px 0;
+    }
+    .modal-flow-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+      position: relative;
+    }
+    .modal-icon {
+      width: 40px;
+      height: 40px;
+      margin-bottom: 5px;
+    }
+    .modal-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      font-size: 24px;
+      flex: 0.5;
+    }
+    .modal-arrow.factory-to-warehouse::after {
+      content: '→';
+      font-size: 24px;
+      color: #333;
+    }
+    .modal-arrow.warehouse-to-retail::after {
+      content: '→';
+      font-size: 24px;
+      color: #3498db;
+    }
+    .modal-arrow.retail-to-customer::after {
+      content: '→';
+      font-size: 24px;
+      color: #2ecc71;
+    }
+    .modal-truck {
+      width: 30px;
+      height: 30px;
+      position: absolute;
+      top: 30px;
+      left: 25%;
+      transform: translate(-50%, -50%);
+      animation: truckPulse 1.5s infinite;
+    }
+    .modal-box {
+      width: 30px;
+      height: 30px;
+      position: absolute;
+      top: -30px;
+      left: 25%;
+      transform: translate(-50%, -50%);
+      animation: truckPulse 1.5s infinite;
+    }
+    .modal-flow-item span {
+      font-size: 12px;
+      white-space: nowrap;
+      text-align: center;
+    }
+    .sdg-label {
+      position: absolute;
+      top: -20px;
+      font-size: 12px;
+      color: #3498db;
+      font-weight: bold;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+<script>
+  function playMusic() {
+    const iframe = document.createElement("iframe");
+    iframe.src = "https://www.youtube.com/embed/RfYc0VTtU8E?autoplay=1";
+    iframe.allow = "autoplay";
+    iframe.style = "width:1px; height:1px; opacity:0; position:absolute;";
+    document.body.appendChild(iframe);
+  }
+</script>
+
+<div id="map"></div>
+<div class="legend">
+  <h3>Logistics Network</h3>
+  <div class="legend-item">
+    <svg class="legend-icon factory" viewBox="0 0 24 24" fill="#e74c3c">
+      <path d="M2 21h20v-2H2v2zm2-3h16V8.85L18 9l-2-7H8L6 9l-2-.15V18zm6-11h4v2h-4V7zm0 3h4v2h-4v-2zm0 3h4v2h-4v-2z"/>
+      <rect x="6" y="4" width="2" height="4"/>
+      <rect x="16" y="4" width="2" height="4"/>
+    </svg>
+    <span>SXEC Factory</span>
+  </div>
+  <div class="legend-item">
+    <svg class="legend-icon warehouse" viewBox="0 0 24 24" fill="#f39c12">
+      <path d="M12 3L2 9v12h20V9L12 3zm6 16h-4v-4h-4v4H6v-6l6-4.5L18 13v6z"/>
+      <rect x="9" y="13" width="2" height="4"/>
+      <rect x="13" y="13" width="2" height="4"/>
+    </svg>
+    <span>FPT Warehouse</span>
+  </div>
+  <div class="legend-item">
+    <svg class="legend-icon shop" viewBox="0 0 24 24" fill="#3498db">
+      <path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zM10 6a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1a1 1 0 0 0 2 0V9h4v1a1 1 0 0 0 2 0V9h2v10z"/>
+    </svg>
+    <span>FPT Shop (7 locations)</span>
+  </div>
+  <div class="legend-item">
+    <svg class="legend-icon speaker" viewBox="0 0 24 24" fill="#2ecc71" onclick="playMusic()" style="cursor: pointer;">
+      <path d="M5 9v6h4l5 5V4l-5 5H5zm11.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.74 2.5-2.26 2.5-4.02zm2.5 0c0 3.04-1.73 5.64-4.25 6.92v2.07c4.01-1.45 6.75-5.26 6.75-9.99s-2.74-8.54-6.75-9.99v2.07C17.27 5.36 19 7.96 19 11z"/>
+    </svg>
+    <span>Play Music</span>
+  </div>
+</div>
+<button class="delivery-button" onclick="openModal()">DeliveryPress</button>
+<div class="modal" id="logisticsModal">
+  <div class="modal-content">
+    <span class="close-button" onclick="closeModal()">&times;</span>
+    <h2>Logistics Flow</h2>
+    <p>Our logistics process ensures efficient delivery from production to the end customer.</p>
+    <div class="modal-flow">
+      <div class="modal-flow-item">
+        <svg class="modal-icon" viewBox="0 0 24 24" fill="#e74c3c">
+          <path d="M2 21h20v-2H2v2zm2-3h16V8.85L18 9l-2-7H8L6 9l-2-.15V18zm6-11h4v2h-4V7zm0 3h4v2h-4v-2zm0 3h4v2h-4v-2z"/>
+          <rect x="6" y="4" width="2" height="4"/>
+          <rect x="16" y="4" width="2" height="4"/>
+        </svg>
+        <span>SXEC Factory</span>
+      </div>
+      <div class="modal-arrow factory-to-warehouse">
+        <svg class="modal-truck" viewBox="0 0 24 24" fill="red">
+          <path d="M3 3h13v13H3V3zm14 4h4l2 4v5h-2a2 2 0 01-4 0H9a2 2 0 01-4 0H3v-2h2V7a1 1 0 011-1h11zM6.5 17a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm11 0a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>
+        </svg>
+      </div>
+      <div class="modal-flow-item">
+        <svg class="modal-icon" viewBox="0 0 24 24" fill="#f39c12">
+          <path d="M12 3L2 9v12h20V9L12 3zm6 16h-4v-4h-4v4H6v-6l6-4.5L18 13v6z"/>
+          <rect x="9" y="13" width="2" height="4"/>
+          <rect x="13" y="13" width="2" height="4"/>
+        </svg>
+        <span>FPT Warehouse</span>
+      </div>
+      <div class="modal-arrow warehouse-to-retail">
+        <svg class="modal-truck" viewBox="0 0 24 24" fill="red">
+          <path d="M3 3h13v13H3V3zm14 4h4l2 4v5h-2a2 2 0 01-4 0H9a2 2 0 01-4 0H3v-2h2V7a1 1 0 011-1h11zM6.5 17a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm11 0a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>
+        </svg>
+      </div>
+      <div class="modal-flow-item">
+        <span class="sdg-label">SDG 9</span>
+        <svg class="modal-icon" viewBox="0 0 24 24" fill="#3498db">
+          <path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zM10 6a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1a1 1 0 0 0 2 0V9h4v1a1 1 0 0 0 2 0V9h2v10z"/>
+        </svg>
+        <span>FPT Shop/Retail</span>
+      </div>
+      <div class="modal-arrow retail-to-customer">
+        <svg class="modal-box" viewBox="0 0 511.998 511.998" fill="#2ecc71">
+          <path d="M305.404,94.315h-53.895V76.35h-89.825v17.965H35.481C15.881,94.315,0,110.196,0,129.796v342.232 c0,19.6,15.881,35.481,35.481,35.481h341.782c19.842,0,35.93-16.088,35.93-35.93V202.104h-89.825 c-9.926,0-17.965-8.039-17.965-17.965V94.315z"/>
+          <path style="fill:#E8D5B2;" d="M238.33,191.561l-31.735-25.384l-31.735,25.384c-5.309,4.249-13.177,0.467-13.177-6.333V76.352 h89.825v108.876C251.507,192.028,243.638,195.809,238.33,191.561"/>
+          <polygon style="fill:#E8D5B2;" points="53.895,471.578 179.649,471.578 179.649,363.789 53.895,363.789 "/>
+          <path style="fill:#CBB292;" d="M143.719,408.701H89.825c-4.967,0-8.982-4.024-8.982-8.982c0-4.958,4.015-8.982,8.982-8.982h53.895 c4.967,0,8.982,4.024,8.982,8.982C152.702,404.677,148.687,408.701,143.719,408.701"/>
+          <path style="fill:#CBB292;" d="M125.754,444.631h-35.93c-4.967,0-8.982-4.024-8.982-8.982c0-4.958,4.015-8.982,8.982-8.982h35.93 c4.967,0,8.982,4.024,8.982,8.982C134.737,440.607,130.722,444.631,125.754,444.631"/>
+          <path style="fill:#B1D3F0;" d="M314.6,4.49h179.218c10.042,0,18.181,8.138,18.181,18.18v179.218c0,10.042-8.138,18.18-18.181,18.18 H314.6c-10.042,0-18.18-8.138-18.18-18.18V22.671C296.419,12.628,304.557,4.49,314.6,4.49"/>
+          <path style="fill:#556080;" d="M431.158,166.175h-89.825c-4.967,0-8.982-4.024-8.982-8.982s4.015-8.982,8.982-8.982h89.825 c14.857,0,26.947-12.09,26.947-26.947c0-4.958,4.015-8.982,8.982-8.982c4.967,0,8.982,4.024,8.982,8.982 C476.07,146.027,455.923,166.175,431.158,166.175"/>
+          <path style="fill:#556080;" d="M368.281,193.122c-2.299,0-4.599-0.88-6.351-2.632l-26.947-26.947 c-3.512-3.512-3.512-9.189,0-12.701l26.947-26.947c3.512-3.512,9.189-3.512,12.701,0c3.512,3.512,3.512,9.189,0,12.701 l-20.597,20.597l20.597,20.597c3.512,3.512,3.512,9.189,0,12.701C372.88,192.242,370.58,193.122,368.281,193.122"/>
+          <path style="fill:#556080;" d="M341.333,112.28c-4.967,0-8.982-4.024-8.982-8.982c0-24.765,20.148-44.912,44.912-44.912h89.825 c4.967,0,8.982,4.024,8.982,8.982s-4.015,8.982-8.982,8.982h-89.825c-14.857,0-26.947,12.09-26.947,26.947 C350.316,108.256,346.301,112.28,341.333,112.28"/>
+          <path style="fill:#556080;" d="M440.14,103.297c-2.299,0-4.599-0.88-6.351-2.632c-3.512-3.512-3.512-9.189,0-12.701l20.597-20.597 L433.79,46.771c-3.512-3.512-3.512-9.189,0-12.701c3.512-3.512,9.189-3.512,12.701,0l26.947,26.947 c3.512,3.512,3.512,9.189,0,12.701l-26.947,26.947C444.739,102.417,442.44,103.297,440.14,103.297"/>
+        </svg>
+        <svg class="modal-truck" viewBox="0 0 24 24" fill="#2ecc71">
+          <path d="M5 16m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+          <path d="M19 16m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+          <path d="M7.5 14h5l4 -4h-10.5m1.5 4l4 -4" />
+          <path d="M13 6h2l1.5 3l2 4" />
+        </svg>
+
+      </div>
+      <div class="modal-flow-item">
+        <svg class="modal-icon" viewBox="0 0 24 24" fill="#2ecc71">
+          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+        </svg>
+        <span>End Customer</span>
+      </div>
+    </div>
+    <p>Products are manufactured at the factory, transported to the warehouse for storage, then distributed to retail shops, and finally delivered to the end customer.</p>
+  </div>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  var map = L.map('map').setView([10.7769, 106.7009], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  var pulseIconXsec = L.divIcon({ className: 'pulse-icon-xsec pulse', iconSize: [20, 20] });
+  var pulseIconFpt = L.divIcon({ className: 'pulse-icon-fpt pulse', iconSize: [20, 20] });
+
+  var truckIcon = L.divIcon({
+    className: '',
+    html: `<div class="truck-icon">
+             <svg width=30 height="30" viewBox="0 0 24 24" fill="red" xmlns="http://www.w3.org/2000/svg">
+               <path d="M3 3h13v13H3V3zm14 4h4l2 4v5h-2a2 2 0 01-4 0H9a2 2 0 01-4 0H3v-2h2V7a1 1 0 011-1h11zM6.5 17a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm11 0a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>
+             </svg>
+           </div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15]
+  });
+
+  var xsecFactoryIconSvg = `<svg class="legend-icon factory" viewBox="0 0 24 24" fill="#e74c3c" style="width: 24px; height: 24px;">
+                             <path d="M2 21h20v-2H2v2zm2-3h16V8.85L18 9l-2-7H8L6 9l-2-.15V18zm6-11h4v2h-4V7zm0 3h4v2h-4v-2zm0 3h4v2h-4v-2z"/>
+                             <rect x="6" y="4" width="2" height="4"/>
+                             <rect x="16" y="4" width="2" height="4"/>
+                           </svg>`;
+
+  var fptWarehouseIconSvg = `<svg class="legend-icon warehouse" viewBox="0 0 24 24" fill="#f39c12" style="width: 24px; height: 24px;">
+                              <path d="M12 3L2 9v12h20V9L12 3zm6 16h-4v-4h-4v4H6v-6l6-4.5L18 13v6z"/>
+                              <rect x="9" y="13" width="2" height="4"/>
+                              <rect x="13" y="13" width="2" height="4"/>
+                            </svg>`;
+
+  var fptShopIconSvg = `<svg class="legend-icon shop" viewBox="0 0 24 24" fill="#3498db" style="width: 24px; height: 24px;">
+                         <path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zM10 6a2 2 0 0 1 4 0v1h-4V6zm8 13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V9h2v1a1 1 0 0 0 2 0V9h4v1a1 1 0 0 0 2 0V9h2v10z"/>
+                       </svg>`;
+
+  var xsecMarker = L.marker([10.8423, 106.8093], { icon: pulseIconXsec }).addTo(map);
+  xsecMarker.bindPopup(`<div class="popup-row">${xsecFactoryIconSvg}<span>Khu Công nghệ Cao Sài Gòn</span></div>`, { autoClose: false, closeOnClick: false }).openPopup();
+
+  var fptWarehouseMarker = L.marker([10.8500, 106.7580], { icon: pulseIconFpt }).addTo(map);
+  fptWarehouseMarker.bindPopup(`<div class="popup-row">${fptWarehouseIconSvg}<span>Khu phố 8, Linh Trung, TP. Thủ Đức</span></div>`, { autoClose: false, closeOnClick: false }).openPopup();
+
+  var fptShops = [
+    { name: "FPT Shop Quận 1", lat: 10.7744, lng: 106.6993, address: "121 Lê Lợi, P. Bến Thành, Q. 1" },
+    { name: "FPT Shop Quận 2", lat: 10.7834, lng: 106.7375, address: "192A Nguyễn Thị Định, P. An Phú, Q. 2" },
+    { name: "FPT Shop Quận 8", lat: 10.7415, lng: 106.6642, address: "155-157 Liên Tỉnh 5, P. 5, Q. 8" },
+    { name: "FPT Shop Quận 12", lat: 10.8587, lng: 106.6265, address: "563 Nguyễn Ảnh Thủ, P. Hiệp Thành, Q. 12" },
+    { name: "FPT Shop Gò Vấp", lat: 10.8218, lng: 106.6863, address: "418 Nguyễn Văn Nghi, P. 7, Q. Gò Vấp" },
+    { name: "FPT Shop Tân Bình", lat: 10.8013, lng: 106.6537, address: "318 Hoàng Văn Thụ, P. 4, Q. Tân Bình" },
+    { name: "FPT Shop Thủ Đức", lat: 10.8036, lng: 106.7503, address: "42 Trần Não, P. An Khánh, TP. Thủ Đức" }
+  ];
+
+  fptShops.forEach((shop) => {
+    L.marker([shop.lat, shop.lng])
+            .addTo(map)
+            .bindPopup(`<div class="popup-row">${fptShopIconSvg}<span>${shop.address}</span></div>`);
+  });
+
+  function bezierCurve(start, control, end, steps) {
+    var points = [];
+    for (var t = 0; t <= 1; t += 1 / steps) {
+      var lat = (1 - t) * (1 - t) * start[0] + 2 * (1 - t) * t * control[0] + t * t * end[0];
+      var lng = (1 - t) * (1 - t) * start[1] + 2 * (1 - t) * t * control[1] + t * t * end[1];
+      points.push([lat, lng]);
+    }
+    return points;
+  }
+
+  function interpolateCurve(start, control, end, fraction) {
+    var lat = (1 - fraction) * (1 - fraction) * start[0] + 2 * (1 - fraction) * fraction * control[0] + fraction * fraction * end[0];
+    var lng = (1 - fraction) * (1 - fraction) * start[1] + 2 * (1 - fraction) * fraction * control[1] + fraction * fraction * end[1];
+    return [lat, lng];
+  }
+
+  var startPoint = [10.8423, 106.8093];
+  var warehousePoint = [10.8500, 106.7580];
+
+  var factoryToWarehouseControl = [(startPoint[0] + warehousePoint[0]) / 2 + 0.05, (startPoint[1] + warehousePoint[1]) / 2];
+  var factoryToWarehouseCurve = bezierCurve(startPoint, factoryToWarehouseControl, warehousePoint, 100);
+  var factoryToWarehouseRoute = L.polyline(factoryToWarehouseCurve, {
+    color: 'black',
+    weight: 4,
+    dashArray: '10, 10',
+    className: 'dashed-line'
+  }).addTo(map);
+
+  var warehouseToShopRoutes = [];
+  var warehouseToShopCurves = [];
+  fptShops.forEach((shop, index) => {
+    var controlPoint = [
+      (warehousePoint[0] + shop.lat) / 2,
+      (warehousePoint[1] + shop.lng) / 2 + 0.02 * (index - 3)
+    ];
+    var curvePoints = bezierCurve(warehousePoint, controlPoint, [shop.lat, shop.lng], 100);
+    warehouseToShopCurves.push({ curve: curvePoints, control: controlPoint, end: [shop.lat, shop.lng] });
+
+    var route = L.polyline(curvePoints, {
+      color: 'blue',
+      weight: 4,
+      dashArray: '10, 10',
+      className: 'dashed-line'
+    }).addTo(map);
+    warehouseToShopRoutes.push(route);
+  });
+
+  class Truck {
+    constructor(startPos, icon, type, targetShopIndex = null) {
+      this.marker = L.marker(startPos, { icon: icon }).addTo(map);
+      this.fraction = 0;
+      this.speed = 0.008;
+      this.type = type;
+      this.targetShopIndex = targetShopIndex;
+    }
+
+    update() {
+      this.fraction += this.speed;
+
+      if (this.type === 'factory-to-warehouse') {
+        if (this.fraction >= 1) {
+          map.removeLayer(this.marker);
+          return 'completed';
+        } else {
+          var newPos = interpolateCurve(startPoint, factoryToWarehouseControl, warehousePoint, this.fraction);
+          this.marker.setLatLng(newPos);
+        }
+      } else if (this.type === 'warehouse-to-shop') {
+        if (this.fraction >= 1) {
+          map.removeLayer(this.marker);
+          return 'completed';
+        } else {
+          var shopData = warehouseToShopCurves[this.targetShopIndex];
+          var newPos = interpolateCurve(warehousePoint, shopData.control, shopData.end, this.fraction);
+          this.marker.setLatLng(newPos);
+        }
+      }
+      return 'continue';
+    }
+  }
+
+  var trucks = [];
+  var cycleState = 'waiting';
+  var cycleStartTime = 0;
+  var delayBetweenCycles = 5000;
+
+  function startNewCycle() {
+    trucks.push(new Truck(startPoint, truckIcon, 'factory-to-warehouse'));
+    cycleState = 'factory-to-warehouse';
+    cycleStartTime = Date.now();
+  }
+
+  function spawnWarehouseTrucks() {
+    for (let i = 0; i < fptShops.length; i++) {
+      trucks.push(new Truck(warehousePoint, truckIcon, 'warehouse-to-shop', i));
+    }
+    cycleState = 'warehouse-to-shops';
+  }
+
+  function manageTrucks() {
+    var currentTime = Date.now();
+
+    if (cycleState === 'waiting') {
+      startNewCycle();
+    } else if (cycleState === 'factory-to-warehouse') {
+      var factoryTrucks = trucks.filter(truck => truck.type === 'factory-to-warehouse');
+      if (factoryTrucks.length === 0) {
+        spawnWarehouseTrucks();
+      }
+    } else if (cycleState === 'warehouse-to-shops') {
+      var warehouseTrucks = trucks.filter(truck => truck.type === 'warehouse-to-shop');
+      if (warehouseTrucks.length === 0) {
+        cycleState = 'delay';
+        cycleStartTime = currentTime;
+      }
+    } else if (cycleState === 'delay') {
+      if (currentTime - cycleStartTime > delayBetweenCycles) {
+        cycleState = 'waiting';
+      }
+    }
+
+    var trucksToRemove = [];
+    trucks.forEach((truck, index) => {
+      if (truck.update() === 'completed') {
+        trucksToRemove.push(index);
+      }
+    });
+
+    for (let i = trucksToRemove.length - 1; i >= 0; i--) {
+      trucks.splice(trucksToRemove[i], 1);
+    }
+  }
+
+  setInterval(manageTrucks, 50);
+  cycleState = 'waiting';
+
+  function openModal() {
+    document.getElementById('logisticsModal').style.display = 'flex';
+  }
+
+  function closeModal() {
+    document.getElementById('logisticsModal').style.display = 'none';
+  }
+</script>
+</body>
+</html>
